@@ -45,11 +45,3 @@ third_party
 Build/Targets/x86_64-microsoft-win32-vs2015/**/Debug/
 Build/Targets/x86_64-microsoft-win32-vs2015/**/Release
 IDEWorkspaceChecks.plist
-CMakeSettings.json
-Build/Targets/x86_64-microsoft-win32-vs2015/.vs/Bento4/v15/Solution.VC.db-wal
-Build/Targets/x86_64-microsoft-win32-vs2015/.vs/Bento4/v15/Solution.VC.db-shm
-Build/Targets/x86_64-microsoft-win32-vs2015/.vs/Bento4/v15/ipch/AutoPCH/fdcda99cb3dae1d8/MP4FRAGMENT.ipch
-Build/Targets/x86_64-microsoft-win32-vs2015/.vs/Bento4/v15/ipch/AutoPCH/c61fd65d153ac7c4/MP4FRAGMENT.ipch
-.vs/slnx.sqlite
-.vs/ProjectSettings.json
-.vs/launch.vs.json
