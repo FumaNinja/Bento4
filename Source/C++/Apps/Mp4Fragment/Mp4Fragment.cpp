@@ -1058,74 +1058,6 @@ IsIFrame(AP4_Sample& sample, AP4_AvcSampleDescription* avc_desc) {
 }
 
 /*----------------------------------------------------------------------
-|   IsIFrame for Hevc
-+---------------------------------------------------------------------*/
-static bool
-IsIFrame(AP4_Sample& sample, AP4_HevcSampleDescription* hevc_desc) {
-    AP4_DataBuffer sample_data;
-    if (AP4_FAILED(sample.ReadData(sample_data))) {
-        return false;
-    }
-
-    const unsigned char* data = sample_data.GetData();
-    AP4_Size             size = sample_data.GetDataSize();
-
-    AP4_HevcFrameParser* m_HevcParser = new AP4_HevcFrameParser();
-    AP4_HevcFrameParser::AccessUnitInfo access_unit_info;
-
-    while (size >= hevc_desc->GetNaluLengthSize()) {
-        unsigned int nalu_length = 0;
-        if (hevc_desc->GetNaluLengthSize() == 1) {
-            nalu_length = *data++;
-            --size;
-        }
-        else if (hevc_desc->GetNaluLengthSize() == 2) {
-            nalu_length = AP4_BytesToUInt16BE(data);
-            data += 2;
-            size -= 2;
-        } else if (hevc_desc->GetNaluLengthSize() == 4) {
-            nalu_length = AP4_BytesToUInt32BE(data);
-            data += 4;
-            size -= 4;
-        } else {
-            return false;
-        }
-        if (nalu_length <= size) {
-            size -= nalu_length;
-        } else {
-            size = 0;
-        }
-
-        unsigned int nal_unit_type = (*data >> 1) & 0x3F;
-
-        if (nal_unit_type <= 9) {
-            AP4_HevcSliceSegmentHeader slice_header;
-            AP4_Result result = m_HevcParser->ParseSliceSegmentHeader(data + 2, nalu_length, nal_unit_type, slice_header);
-            if (AP4_FAILED(result)) return false;
-            return slice_header.slice_type == 2;
-        } else if (16 <= nal_unit_type && nal_unit_type <= 23) {
-            // When nal_unit_type has a value in the range of BLA_W_LP to RSV_IRAP_VCL23
-            // slice_type shall be equal to 2.
-            return true;
-        } else if (32 <= nal_unit_type && nal_unit_type <= 34) {
-            // VPS_NUT, SPS_NUT, PPS_NUT
-            AP4_Result result = m_HevcParser->Feed(data, nalu_length, access_unit_info);
-            if (AP4_FAILED(result)) return false;
-        } else if (nal_unit_type == 35) {
-            // Access unit delimiter
-            AP4_BitStream bits;
-            bits.WriteBytes(data + 2, 8);
-            // pic_type
-            return bits.ReadBits(3) == 0;
-        }
-
-        data += nalu_length;
-    }
-
-    return false;
-}
-
-/*----------------------------------------------------------------------
 |   main
 +---------------------------------------------------------------------*/
 int
@@ -1381,14 +1313,15 @@ main(int argc, char** argv)
         return 1;
     }
     AP4_AvcSampleDescription* avc_desc = NULL;
-    AP4_HevcSampleDescription* hevc_desc = NULL;
     if (video_track && (Options.force_i_frame_sync != AP4_FRAGMENTER_FORCE_SYNC_MODE_NONE)) {
+        // that feature is only supported for AVC
         AP4_SampleDescription* sdesc = video_track->m_Track->GetSampleDescription(0);
         if (sdesc) {
             avc_desc = AP4_DYNAMIC_CAST(AP4_AvcSampleDescription, sdesc);
         }
         if (avc_desc == NULL) {
-            hevc_desc = AP4_DYNAMIC_CAST(AP4_HevcSampleDescription, sdesc);
+            fprintf(stderr, "--force-i-frame-sync can only be used with AVC/H.264 video\n");
+            return 1;
         }
     }
     
@@ -1436,9 +1369,7 @@ main(int argc, char** argv)
         if (Options.force_i_frame_sync != AP4_FRAGMENTER_FORCE_SYNC_MODE_NONE) {
             for (unsigned int i=0; i<video_track->m_Samples->GetSampleCount(); i++) {
                 if (AP4_SUCCEEDED(video_track->m_Samples->GetSample(i, sample))) {
-                    if (avc_desc != NULL && IsIFrame(sample, avc_desc)) {
-                        video_track->m_Samples->ForceSync(i);
-                    } else if (hevc_desc != NULL && IsIFrame(sample, hevc_desc)) {
+                    if (IsIFrame(sample, avc_desc)) {
                         video_track->m_Samples->ForceSync(i);
                     }
                 }
