@@ -197,7 +197,7 @@ static void
 scaling_list_data(AP4_BitReader& bits)
 {
     for (unsigned int sizeId = 0; sizeId < 4; sizeId++) {
-        for (unsigned int matrixId = 0; matrixId < ((sizeId == 3)?2:6); matrixId++) {
+        for (unsigned int matrixId = 0; matrixId < (unsigned int)((sizeId == 3)?2:6); matrixId++) {
             unsigned int flag = bits.ReadBit(); // scaling_list_pred_mode_flag[ sizeId ][ matrixId ]
             if (!flag) {
                 ReadGolomb(bits); // scaling_list_pred_matrix_id_delta[ sizeId ][ matrixId ]
@@ -243,11 +243,15 @@ parse_st_ref_pic_set(AP4_HevcShortTermRefPicSet*         rps,
         /* abs_delta_rps_minus1 = */ ReadGolomb(bits);
         if (delta_idx_minus1+1 > stRpsIdx) return AP4_ERROR_INVALID_FORMAT; // should not happen
         unsigned int RefRpsIdx = stRpsIdx - (delta_idx_minus1 + 1);
-        unsigned int NumDeltaPocs = sps->short_term_ref_pic_sets[RefRpsIdx].num_negative_pics + sps->short_term_ref_pic_sets[RefRpsIdx].num_positive_pics;
+        unsigned int NumDeltaPocs = sps->short_term_ref_pic_sets[RefRpsIdx].num_delta_pocs;
         for (unsigned j=0; j<=NumDeltaPocs; j++) {
             unsigned int used_by_curr_pic_flag /*[j]*/ = bits.ReadBit();
+            unsigned int use_delta_flag /*[j]*/ = 1;
             if (!used_by_curr_pic_flag /*[j]*/) {
-                /* use_delta_flag[j] = */ bits.ReadBit();
+                use_delta_flag /*[j]*/ = bits.ReadBit();
+            }
+            if (used_by_curr_pic_flag /*[j]*/ || use_delta_flag /*[j]*/) {
+                rps->num_delta_pocs++;
             }
         }
     } else {
@@ -256,6 +260,7 @@ parse_st_ref_pic_set(AP4_HevcShortTermRefPicSet*         rps,
         if (rps->num_negative_pics > 16 || rps->num_positive_pics > 16) {
             return AP4_ERROR_INVALID_FORMAT;
         }
+        rps->num_delta_pocs = rps->num_negative_pics + rps->num_positive_pics;
         for (unsigned int i=0; i<rps->num_negative_pics; i++) {
             rps->delta_poc_s0_minus1[i] = ReadGolomb(bits);
             rps->used_by_curr_pic_s0_flag[i] = bits.ReadBit();
@@ -915,7 +920,7 @@ AP4_HevcSequenceParameterSet::Parse(const unsigned char* data, unsigned int data
         return AP4_ERROR_INVALID_FORMAT;
     }
     for (unsigned int i=0; i<num_short_term_ref_pic_sets; i++) {
-        AP4_Result result = parse_st_ref_pic_set(&short_term_ref_pic_sets[i], this, i, num_short_term_ref_pic_sets, bits);
+        result = parse_st_ref_pic_set(&short_term_ref_pic_sets[i], this, i, num_short_term_ref_pic_sets, bits);
         if (AP4_FAILED(result)) return result;
     }
     long_term_ref_pics_present_flag = bits.ReadBit();

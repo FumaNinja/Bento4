@@ -127,6 +127,7 @@ PrintUsageAndExit()
             "\n\nusage: mp42hls [options] <input>\n"
             "Options:\n"
             "  --verbose\n"
+            "  --show-info\n"
             "  --hls-version <n> (default: 3)\n"
             "  --pmt-pid <pid>\n"
             "    PID to use for the PMT (default: 0x100)\n"
@@ -978,8 +979,10 @@ ReadSample(SampleReader&   reader,
     AP4_Result result = reader.ReadSample(sample, sample_data);
     if (AP4_FAILED(result)) {
         if (result == AP4_ERROR_EOS) {
+            // advance the timestamp by the last sample's duration
             ts += duration;
             eos = true;
+            return AP4_SUCCESS;
         } else {
             return result;
         }
@@ -2108,6 +2111,17 @@ main(int argc, char** argv)
         if (Stats.segments_total_duration != 0.0) {
             average_iframe_bitrate = 8.0*(double)Stats.iframes_total_size/Stats.segments_total_duration;
         }
+
+        double frame_rate = 0.0;
+        if (video_track && (Stats.segments_total_duration != 0.0)) {
+            double sample_count = (double)video_track->GetSampleCount();
+            double media_duration = (double)video_track->GetMediaDuration();
+            double timescale = (double)video_track->GetMediaTimeScale();
+            if (media_duration > 0.0) {
+                frame_rate = sample_count/(media_duration/timescale);
+            }
+        }
+
         printf(
             "{\n"
         );
@@ -2117,13 +2131,15 @@ main(int argc, char** argv)
             "    \"avg_segment_bitrate\": %f,\n"
             "    \"max_segment_bitrate\": %f,\n"
             "    \"avg_iframe_bitrate\": %f,\n"
-            "    \"max_iframe_bitrate\": %f\n"
+            "    \"max_iframe_bitrate\": %f,\n"
+            "    \"frame_rate\": %f\n"
             "  }",
             (double)movie->GetDurationMs()/1000.0,
             average_segment_bitrate,
             Stats.max_segment_bitrate,
             average_iframe_bitrate,
-            Stats.max_iframe_bitrate
+            Stats.max_iframe_bitrate,
+            frame_rate
         );
         if (audio_track) {
             AP4_String codec;

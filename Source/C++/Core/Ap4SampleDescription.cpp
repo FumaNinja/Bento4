@@ -35,6 +35,8 @@
 #include "Ap4SampleEntry.h"
 #include "Ap4AvccAtom.h"
 #include "Ap4HvccAtom.h"
+#include "Ap4VpccAtom.h"
+#include "Ap4Av1cAtom.h"
 #include "Ap4Utils.h"
 #include "Ap4Mp4AudioInfo.h"
 
@@ -53,6 +55,7 @@ AP4_DEFINE_DYNAMIC_CAST_ANCHOR(AP4_MpegVideoSampleDescription)
 AP4_DEFINE_DYNAMIC_CAST_ANCHOR(AP4_MpegSystemSampleDescription)
 AP4_DEFINE_DYNAMIC_CAST_ANCHOR(AP4_AvcSampleDescription)
 AP4_DEFINE_DYNAMIC_CAST_ANCHOR(AP4_HevcSampleDescription)
+AP4_DEFINE_DYNAMIC_CAST_ANCHOR(AP4_Av1SampleDescription)
 AP4_DEFINE_DYNAMIC_CAST_ANCHOR(AP4_SubtitleSampleDescription)
 
 /*----------------------------------------------------------------------
@@ -76,6 +79,7 @@ AP4_GetFormatName(AP4_UI32 format)
         case AP4_SAMPLE_FORMAT_HVC1: return "H.265";
         case AP4_SAMPLE_FORMAT_DVH1: return "Dolby Vision (H.265)";
         case AP4_SAMPLE_FORMAT_DVHE: return "Dolby Vision (H.265)";
+        case AP4_SAMPLE_FORMAT_AV01: return "AV1";
         case AP4_SAMPLE_FORMAT_OVC1: return "VC-1";
         case AP4_SAMPLE_FORMAT_OWMA: return "WMA";
         case AP4_SAMPLE_FORMAT_AC_3: return "Dolby Digital (AC-3)";
@@ -107,6 +111,9 @@ AP4_GetFormatName(AP4_UI32 format)
         case AP4_SAMPLE_FORMAT_VC_1: return "SMPTE VC-1";
         case AP4_SAMPLE_FORMAT_XML_: return "XML Metadata";
         case AP4_SAMPLE_FORMAT_STPP: return "Timed Text";
+        case AP4_SAMPLE_FORMAT_VP8:  return "VP8";
+        case AP4_SAMPLE_FORMAT_VP9:  return "VP9";
+        case AP4_SAMPLE_FORMAT_VP10: return "VP10";
         default: return NULL;
     }
 }
@@ -562,6 +569,141 @@ AP4_HevcSampleDescription::ToAtom() const
 }
 
 /*----------------------------------------------------------------------
+|   AP4_Av1SampleDescription::AP4_Av1SampleDescription
++---------------------------------------------------------------------*/
+AP4_Av1SampleDescription::AP4_Av1SampleDescription(AP4_UI32        format,
+                                                   AP4_UI16        width,
+                                                   AP4_UI16        height,
+                                                   AP4_UI16        depth,
+                                                   const char*     compressor_name,
+                                                   AP4_UI08        version,
+                                                   AP4_UI08        seq_profile,
+                                                   AP4_UI08        seq_level_idx_0,
+                                                   AP4_UI08        seq_tier_0,
+                                                   AP4_UI08        high_bitdepth,
+                                                   AP4_UI08        twelve_bit,
+                                                   AP4_UI08        monochrome,
+                                                   AP4_UI08        chroma_subsampling_x,
+                                                   AP4_UI08        chroma_subsampling_y,
+                                                   AP4_UI08        chroma_sample_position,
+                                                   AP4_UI08        initial_presentation_delay_present,
+                                                   AP4_UI08        initial_presentation_delay_minus_one,
+                                                   const AP4_UI08* config_obus,
+                                                   AP4_Size        config_obus_size) :
+    AP4_SampleDescription(TYPE_AV1, format, NULL),
+    AP4_VideoSampleDescription(width, height, depth, compressor_name)
+{
+    m_Av1cAtom = new AP4_Av1cAtom(version,
+                                  seq_profile,
+                                  seq_level_idx_0,
+                                  seq_tier_0,
+                                  high_bitdepth,
+                                  twelve_bit,
+                                  monochrome,
+                                  chroma_subsampling_x,
+                                  chroma_subsampling_y,
+                                  chroma_sample_position,
+                                  initial_presentation_delay_present,
+                                  initial_presentation_delay_minus_one,
+                                  config_obus,
+                                  config_obus_size);
+    m_Details.AddChild(m_Av1cAtom);
+}
+
+/*----------------------------------------------------------------------
+|   AP4_Av1SampleDescription::AP4_Av1SampleDescription
++---------------------------------------------------------------------*/
+AP4_Av1SampleDescription::AP4_Av1SampleDescription(AP4_UI32            format,
+                                                   AP4_UI16            width,
+                                                   AP4_UI16            height,
+                                                   AP4_UI16            depth,
+                                                   const char*         compressor_name,
+                                                   const AP4_Av1cAtom* av1c) :
+    AP4_SampleDescription(TYPE_AV1, format, NULL),
+    AP4_VideoSampleDescription(width, height, depth, compressor_name)
+{
+    if (av1c) {
+        m_Av1cAtom = new AP4_Av1cAtom(*av1c);
+    } else {
+        // should never happen
+        m_Av1cAtom = new AP4_Av1cAtom();
+    }
+    m_Details.AddChild(m_Av1cAtom);
+}
+
+/*----------------------------------------------------------------------
+|   AP4_Av1SampleDescription::AP4_Av1SampleDescription
++---------------------------------------------------------------------*/
+AP4_Av1SampleDescription::AP4_Av1SampleDescription(AP4_UI32        format,
+                                                   AP4_UI16        width,
+                                                   AP4_UI16        height,
+                                                   AP4_UI16        depth,
+                                                   const char*     compressor_name,
+                                                   AP4_AtomParent* details) :
+    AP4_SampleDescription(TYPE_AV1, format, details),
+    AP4_VideoSampleDescription(width, height, depth, compressor_name),
+    m_Av1cAtom(NULL)
+{
+    AP4_Av1cAtom* av1c = AP4_DYNAMIC_CAST(AP4_Av1cAtom, m_Details.GetChild(AP4_ATOM_TYPE_AV1C));
+    if (av1c) {
+        m_Av1cAtom = av1c;
+    } else {
+        // shoud never happen
+        m_Av1cAtom = new AP4_Av1cAtom();
+        m_Details.AddChild(m_Av1cAtom);
+    }
+}
+
+/*----------------------------------------------------------------------
+|   AP4_Av1cSampleDescription::GetCodecString
++---------------------------------------------------------------------*/
+AP4_Result
+AP4_Av1SampleDescription::GetCodecString(AP4_String& codec) {
+    AP4_UI08 bit_depth = 10;
+    AP4_UI08 color_primaries = 1;
+    AP4_UI08 transfer_characteristics = 1;
+    AP4_UI08 matrix_coefficients = 1;
+    AP4_UI08 video_full_range_flag = 0;
+    char coding[5];
+    AP4_FormatFourChars(coding, GetFormat());
+    char workspace[64];
+    AP4_FormatString(workspace,
+                     sizeof(workspace),
+                     "%s.%d.%d%d.%c.%d.%d%d%d.%02d.%02d.%02d.%d",
+                     coding,
+                     this->GetSeqProfile(),
+                     this->GetSeqLevelIdx0() >> 4,
+                     this->GetSeqTier0() == 0 ? 'M' : 'H',
+                     bit_depth,
+                     this->GetMonochrome(),
+                     this->GetChromaSubsamplingX(),
+                     this->GetChromaSubsamplingY(),
+                     (this->GetChromaSubsamplingX() == 1 && this->GetChromaSubsamplingY() == 1) ?
+                     this->GetChromaSamplePosition() : 0,
+                     color_primaries,
+                     transfer_characteristics,
+                     matrix_coefficients,
+                     video_full_range_flag);
+    codec = workspace;
+    
+    return AP4_SUCCESS;
+}
+
+/*----------------------------------------------------------------------
+|   AP4_Av1SampleDescription::ToAtom
++---------------------------------------------------------------------*/
+AP4_Atom*
+AP4_Av1SampleDescription::ToAtom() const
+{
+    return new AP4_Av1SampleEntry(m_Format,
+                                  m_Width,
+                                  m_Height,
+                                  m_Depth,
+                                  m_CompressorName.GetChars(),
+                                  &m_Details);
+}
+
+/*----------------------------------------------------------------------
 |   AP4_MpegSampleDescription::AP4_MpegSampleDescription
 +---------------------------------------------------------------------*/
 AP4_MpegSampleDescription::AP4_MpegSampleDescription(AP4_UI32      format,
@@ -899,6 +1041,9 @@ AP4_MpegSampleDescription::GetObjectTypeString(OTI oti)
         case AP4_OTI_DTS_HIRES_AUDIO:      return "DTS High Resolution Audio";
         case AP4_OTI_DTS_MASTER_AUDIO:     return "DTS Master Audio";
         case AP4_OTI_DTS_EXPRESS_AUDIO:    return "DTS Express/LBR Audio";
+        case AP4_OTI_OPUS_AUDIO:           return "Opus Audio";
+        case AP4_OTI_VP9_VIDEO:            return "VP9 Video";
+        case AP4_OTI_VORBIS_AUDIO:         return "Vorbis Audio";
         case AP4_OTI_13K_VOICE:            return "13K Voice";
         default:                           return "UNKNOWN";
     }
@@ -948,6 +1093,8 @@ AP4_MpegAudioSampleDescription::GetMpeg4AudioObjectTypeString(Mpeg4AudioObjectTy
         case AP4_MPEG4_AUDIO_OBJECT_TYPE_ER_AAC_ELD:              return "Error Resilient AAC ELD";
         case AP4_MPEG4_AUDIO_OBJECT_TYPE_SMR_SIMPLE:              return "SMR Simple";
         case AP4_MPEG4_AUDIO_OBJECT_TYPE_SMR_MAIN:                return "SMR Main";
+        case AP4_MPEG4_AUDIO_OBJECT_TYPE_USAC:                    return "USAC";
+        case AP4_MPEG4_AUDIO_OBJECT_TYPE_SAOC:                    return "SAOC";
         default:                                                  return "UNKNOWN";
     }
 }
